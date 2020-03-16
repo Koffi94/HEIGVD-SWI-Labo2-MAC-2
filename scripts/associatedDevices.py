@@ -8,34 +8,38 @@ import time
 import os
 from scapy.all import Dot11,Dot11Beacon,Dot11Elt,RadioTap,sendp,hexdump
 
-parser = argparse.ArgumentParser(prog="Hidden SSID Revealer",
-                                 usage=" python3 hiddenSSIDRevealer.py -i [interface] -s [secondes]\n",
+parser = argparse.ArgumentParser(prog="Associated Devices",
+                                 usage=" python3 associatedDevices.py -i [interface] -s [secondes]\n",
                                  allow_abbrev=False)
 parser.add_argument("-i", "--Interface", required=True, help="Interface from which you want to monitor packets, needs to be set to monitor mode")
 parser.add_argument("-s", "--Second", required=True, help="Number of second you will monitor packets")
 args = parser.parse_args()
 
 
-# initialize the networks dataframe that will contain all access points nearby
-networks = pandas.DataFrame(columns=["MAC", "SSID", "dBm_Signal"])
+# Initialize the networks dataframe that will contain all access points associated with STA and initialize aps that will contains a set of APs
+networks = pandas.DataFrame(columns=["AP", "STA"])
+aps = set()
 
-# set the index BSSID (MAC address of the AP) for dataFrame
-networks.set_index("MAC", inplace=True)
+# set the index AP (MAC address of the AP) for dataFrame
+networks.set_index("AP", inplace=True)
 
+# Sources : https://www.shellvoide.com/python/finding-connected-stations-of-access-point-python-scapy/
 def callback(packet):
-    if packet.haslayer(Dot11ProbeReq):
-        # extract the STA address of the network
-        mac = str(packet.addr2)
+    if packet.haslayer(Dot11Beacon):
+        ap = packet.getlayer(Dot11).addr2
+        aps.add(ap)
 
-        try:
-            dbm_signal = packet.dBm_AntSignal
-        except:
-            dbm_signal = "N/A"
-
-        if packet.haslayer(Dot11Elt):                          
-            if packet.ID == 0: 
-                ssid = packet.info                            
-                networks.loc[mac] = (ssid.decode('utf-8'), dbm_signal)
+    # This means it's a 802.11 dataframe between an authenticated client and an AP, excluding clients that tried to authenticate and failed
+    elif packet.haslayer(Dot11) and packet.getlayer(Dot11).type == 2 and not packet.haslayer(EAPOL):
+        print("test")
+        src = packet.getlayer(Dot11).addr2
+        dst = packet.getlayer(Dot11).addr1
+        # Identify who's AP and who's STA
+        if src in aps :
+            networks.loc[src] = (dst)
+        elif dst in aps :
+            networks.olc[dst] = (src)
+        
 
 def change_channel():
     ch = 1
